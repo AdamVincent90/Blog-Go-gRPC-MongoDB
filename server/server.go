@@ -89,6 +89,53 @@ func main() {
 	fmt.Println("Mongo Server stopped..")
 }
 
+func (*server) ListBlogs(req *blog.ListBlogsRequest, stream blog.BlogService_ListBlogsServer) error {
+
+	mc, err := collection.Find(context.Background(), collection)
+
+	if err != nil {
+		return status.Errorf(codes.Internal, fmt.Sprintln("Error finding blogs", err))
+	}
+
+	defer mc.Close(context.Background())
+
+	for mc.Next(context.Background()) {
+		time.Sleep(1000 * time.Millisecond)
+		b := &blogItem{}
+
+		if err := mc.Decode(b); err != nil {
+			return status.Errorf(codes.Internal, "Error decoding blogs%+v\n", err)
+		}
+
+		if streamErr := stream.Send(&blog.ListBlogResponse{
+			Blog: blogItemHelper(b),
+		}); streamErr != nil {
+			return status.Errorf(codes.Internal, "Error sending blog to client%+v\n", err)
+		}
+	}
+
+	return nil
+
+}
+
+func (*server) DeleteBlog(ctx context.Context, req *blog.DeleteBlogRequest) (*blog.DeleteBlogResponse, error) {
+	id, err := primitive.ObjectIDFromHex(req.GetBlogId())
+	if err != nil {
+		return nil, status.Errorf(codes.NotFound, fmt.Sprintln("id not found", err))
+	}
+
+	filter := bson.M{"_id": id}
+
+	result, deleteErr := collection.DeleteOne(context.Background(), filter)
+	if deleteErr != nil {
+		return nil, status.Errorf(codes.Internal, fmt.Sprintln("Error deleting record", deleteErr))
+	}
+
+	return &blog.DeleteBlogResponse{
+		Result: fmt.Sprint(result.DeletedCount, " result deleted from mongoDB database"),
+	}, nil
+}
+
 func (*server) CreateBlog(ctx context.Context, req *blog.CreateBlogRequest) (*blog.CreateBlogResponse, error) {
 	d := req.GetBlog()
 	data := blogItem{
@@ -121,6 +168,49 @@ func (*server) CreateBlog(ctx context.Context, req *blog.CreateBlogRequest) (*bl
 	return res, nil
 }
 
+func (*server) UpdateBlog(ctx context.Context, req *blog.UpdateBlogRequest) (*blog.UpdateBlogResponse, error) {
+
+	b := req.GetBlog()
+
+	id, err := primitive.ObjectIDFromHex(b.GetBlogId())
+
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	filter := bson.M{"_id": id}
+	result := collection.FindOne(context.Background(), filter)
+
+	bi := &blogItem{}
+
+	if err2 := result.Decode(&bi); err2 != nil {
+		log.Fatalln(err2)
+	}
+
+	bi.AuthorId = b.GetAuthorId()
+	bi.Title = b.GetTitle()
+	bi.Content = b.GetContent()
+
+	_, err3 := collection.ReplaceOne(context.Background(), filter, bi)
+
+	if err3 != nil {
+		fmt.Println(err3)
+	}
+
+	return &blog.UpdateBlogResponse{
+		Blog: blogItemHelper(bi),
+	}, nil
+}
+
+func blogItemHelper(b *blogItem) *blog.Blog {
+	return &blog.Blog{
+		BlogId:   b.BlogId.Hex(),
+		AuthorId: b.AuthorId,
+		Title:    b.Title,
+		Content:  b.Content,
+	}
+}
+
 func (*server) FindBlog(ctx context.Context, req *blog.FindBlogRequest) (*blog.FindBlogResponse, error) {
 	fmt.Println("Finding Blog service invoked...")
 	id := req.GetBlogId() // GET BLOG ID FROM REQUEST
@@ -136,7 +226,7 @@ func (*server) FindBlog(ctx context.Context, req *blog.FindBlogRequest) (*blog.F
 		return nil, status.Errorf(codes.InvalidArgument, "The ID entered is invalid, please submit a valid ID")
 	}
 
-	b := blogItem{}
+	b := &blogItem{}
 	filter := bson.M{"_id": oid}
 
 	fmt.Println("Finding record with objectID....")
@@ -150,12 +240,7 @@ func (*server) FindBlog(ctx context.Context, req *blog.FindBlogRequest) (*blog.F
 	fmt.Println("Found record.. sending to client")
 
 	return &blog.FindBlogResponse{
-		Blog: &blog.Blog{
-			BlogId:   b.BlogId.Hex(),
-			AuthorId: b.AuthorId,
-			Title:    b.Title,
-			Content:  b.Content,
-		},
+		Blog: blogItemHelper(b),
 	}, nil
 
 }

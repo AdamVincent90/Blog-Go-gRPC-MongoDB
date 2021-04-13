@@ -13,6 +13,9 @@ message Blog {
 service BlogService {
   rpc CreateBlog(CreateBlogRequest) returns (CreateBlogResponse) {};
   rpc FindBlog(FindBlogRequest) returns (FindBlogResponse) {};
+  rpc UpdateBlog(UpdateBlogRequest) returns (UpdateBlogResponse) {};
+  rpc DeleteBlog(DeleteBlogRequest) returns (DeleteBlogResponse) {};
+  rpc ListBlogs(ListBlogsRequest) returns (stream ListBlogResponse) {};
 }
 
 message CreateBlogRequest { Blog blog = 1; }
@@ -20,3 +23,12 @@ message CreateBlogResponse { Blog blog = 1; }
 
 message FindBlogRequest { string blog_id = 1; }
 message FindBlogResponse { Blog blog = 1; }
+
+message UpdateBlogRequest { Blog blog = 1; }
+message UpdateBlogResponse { Blog blog = 1; }
+
+message DeleteBlogRequest { string blog_id = 1; }
+message DeleteBlogResponse { string result = 1; }
+
+message ListBlogsRequest {}
+message ListBlogResponse { Blog blog = 1; }
